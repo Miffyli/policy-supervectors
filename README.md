@@ -1,4 +1,4 @@
-<img src="images/graphical_abstract.png" />
+<img src="images/graphical_abstract.png" align="right" width="60%" />
 
 # Policy Supervectors
 
