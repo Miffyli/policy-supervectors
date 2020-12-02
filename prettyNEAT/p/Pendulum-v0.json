@@ -1,0 +1,9 @@
+{
+    "task":"pendulum",
+    "alg_nReps": 2,
+    "maxGen": 256,
+    "popSize": 128,
+    "prob_addConn": 0.15,
+    "prob_addNode": 0.1,
+    "alg_act": 5
+}
