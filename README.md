@@ -1,6 +1,15 @@
-# Source code for "Policy Supervectors: General Characterization of Agents by their Behaviour"
+<img src="images/graphical_abstract.png" />
 
-Experiments are implemented in Python (experiments ran on 3.7) with requirements in the `requirements.txt´.
+# Policy Supervectors
+
+Source code for paper "Policy Supervectors: General Characterization of Agents by their Behaviour".
+
+**Long story short:** Policy supervectors are fixed-length vectors that describe policy's behaviour (what states they visit),
+which can be quickly compared to each other via e.g. distance. With this one can study how a training algorithm evolves
+policies, as demonstrated in the image above.
+
+## Running the code
+Experiment code is in Python (tested on Python 3.7) with requirements in the `requirements.txt´.
 
 The easiest way to run the experiments is to use conda or other env-handler:
 
