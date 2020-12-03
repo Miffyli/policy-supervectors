@@ -2,7 +2,7 @@
 
 # Policy Supervectors
 
-Source code for paper "Policy Supervectors: General Characterization of Agents by their Behaviour".
+Source code for paper "[Policy Supervectors: General Characterization of Agents by their Behaviour](https://arxiv.org/abs/2012.01244)".
 
 **Long story short:** Policy supervectors are fixed-length vectors that describe policy's behaviour (what states they visit),
 which can be quickly compared to each other via e.g. distance. With this one can study how a training algorithm evolves
