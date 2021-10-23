@@ -4,10 +4,14 @@
 #
 import os
 from glob import glob
+import itertools
+import re
 
 import numpy as np
 import matplotlib
 from matplotlib import pyplot
+
+from plot_paper import interpolate_and_average, color_linestyle_cycle
 
 # Stackoverflow #4931376
 matplotlib.use('Agg')
@@ -379,18 +383,15 @@ def plot_ubm_results():
         NUM_COMPONENTS,
         NUM_REPETITIONS,
         REWARD_SCALES,
-        DIFFERENT_REWARD_THRESHOLD,
         ENVS
     )
 
-    DIFFERENT_REWARD_THRESHOLD = 0.25
-
     ENVS = [
-        "BipedalWalker-v3",
-        "LunarLander-v2",
+        "Pendulum-v0",
         "CartPole-v1",
         "Acrobot-v1",
-        "Pendulum-v0",
+        "LunarLander-v2",
+        "BipedalWalker-v3",
     ]
 
     fig, axs = pyplot.subplots(
@@ -421,19 +422,16 @@ def plot_ubm_results():
                         data = np.load(file_path)
                         # ll_matrix: first axis is data, second axis is adapted-GMMs
                         distance_matrix = data["distance_matrix"]
-                        average_distance = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)].mean()
                         rewards = data["average_episodic_rewards"]
 
-                        # Find policies that are different from each other, based on the
-                        # reward they get
-                        normalized_rewards = (rewards - min_reward) / (max_reward - min_reward)
-                        normalized_reward_difference = np.abs(normalized_rewards - normalized_rewards[:, None])
-                        has_different_reward = normalized_reward_difference > DIFFERENT_REWARD_THRESHOLD
-                        # Only take upper-diagonal (matrix is symmetric and diagonal is zeros)
-                        has_different_reward[np.tril_indices(has_different_reward.shape[0])] = False
-                        distances_to_different = distance_matrix[has_different_reward]
-                        # Compare to average distance
-                        scores.append(average_distance / distances_to_different.mean())
+                        raveled_reward_distances = np.abs(rewards - rewards[:, None])
+                        # Take upper diagonal, skip diagonal
+                        raveled_reward_distances = raveled_reward_distances[np.triu_indices(raveled_reward_distances.shape[0], 1)]
+                        raveled_distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)]
+
+                        # Score is correlation between the two
+                        correlation = np.corrcoef(raveled_distances, raveled_reward_distances)[0, 1]
+                        scores.append(correlation)
 
                 scores = np.array(scores)
                 average_score = np.mean(scores)
@@ -470,9 +468,9 @@ def plot_ubm_results():
                 for traj_i, num_traj in enumerate(NUM_TRAJECTORIES):
                     repetition_errors = []
                     for repetition in range(1, NUM_REPETITIONS + 1):
-                        relative_errors = []
                         file_path = DISTANCE_MATRIX_TEMPLATE.format(env=env, num_traj=num_traj, num_components=num_components, policy_name=policy_name, repetition_num=repetition)
                         distance_matrix = np.load(file_path)["distance_matrix"]
+                        distance_matrix = (distance_matrix - distance_matrix.min()) / (distance_matrix.max() - distance_matrix.min())
                         # Get only upper triangle as distance matrix is symmetric. Exlude diagonal
                         raveled_distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)]
                         # Check if we use this as the zero-point or compute relative error to
@@ -488,7 +486,7 @@ def plot_ubm_results():
         mean_average_errors = np.mean(per_policy_average_errors, axis=0)
         std_average_errors = np.std(per_policy_average_errors, axis=0)
         ax = axs[env_i, 1]
-        ax.imshow(mean_average_errors)
+        ax.imshow(-mean_average_errors)
         # Adjust ticks
         ax.set_xticks([])
         ax.set_yticks([])
@@ -519,6 +517,7 @@ def plot_ubm_results():
                     for repetition in range(1, NUM_REPETITIONS + 1):
                         file_path = DISTANCE_MATRIX_TEMPLATE.format(env=env, num_traj=num_traj, num_components=num_components, policy_name=policy_name, repetition_num=repetition)
                         distance_matrix = np.load(file_path)["distance_matrix"]
+                        distance_matrix = (distance_matrix - distance_matrix.min()) / (distance_matrix.max() - distance_matrix.min())
                         # Get only upper triangle as distance matrix is symmetric. Exlude diagonal
                         raveled_distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)]
                         distances.append(raveled_distances)
@@ -532,7 +531,7 @@ def plot_ubm_results():
         mean_cvs = cvs_array
 
         ax = axs[env_i, 2]
-        ax.imshow(mean_cvs)
+        ax.imshow(-mean_cvs)
         # Adjust ticks
         ax.set_xticks([])
         ax.set_yticks([])
@@ -552,7 +551,7 @@ def plot_ubm_results():
     axs[2, 0].set_ylabel("Number of trajectories")
     axs[4, 1].set_xlabel("Number of components")
     # Add plot type titles to first row
-    axs[0, 0].set_title("Distance to different")
+    axs[0, 0].set_title("Correlation with return-distance")
     axs[0, 1].set_title(ENVS[0].split("-")[0] + "\nDistance error")
     axs[0, 2].set_title("Distance variance")
 
@@ -560,8 +559,299 @@ def plot_ubm_results():
     pyplot.savefig("figures/ubm_analysis_appendix.pdf", bbox_inches="tight", pad_inches=0.0)
 
 
+def plot_metric_results():
+    """
+    Plot the metrics used in UBM experiments for different
+    BCs for a comparison
+    """
+    from run_metric_comparison_experiments import (
+        PIVECTOR_TEMPLATE,
+        PIVECTOR_DISTANCE_MATRIX_TEMPLATE,
+        DISCRIMINATOR_DISTANCE_MATRIX_TEMPLATE,
+        GAUSSIAN_DISTANCE_MATRIX_TEMPLATE,
+        ENCODER_DISTANCE_MATRIX_TEMPLATE,
+        DISCRETIZATION_DISTANCE_MATRIX_TEMPLATE,
+        NUM_TRAJECTORIES,
+        NUM_COMPONENTS,
+        NUM_REPETITIONS,
+        REWARD_SCALES,
+        ENVS
+    )
+
+    # Path-templates to each distance matrix to compare
+    # BC = Behavioural Characteristication
+    BC_DISTANCE_MATRIX_TEMPLATES = [
+        PIVECTOR_DISTANCE_MATRIX_TEMPLATE,
+        GAUSSIAN_DISTANCE_MATRIX_TEMPLATE,
+        DISCRIMINATOR_DISTANCE_MATRIX_TEMPLATE,
+        ENCODER_DISTANCE_MATRIX_TEMPLATE,
+        DISCRETIZATION_DISTANCE_MATRIX_TEMPLATE,
+    ]
+
+    BC_LEGEND_NAMES = [
+        "Supervector",
+        "Gaussian",
+        "Discriminator",
+        "Encoder",
+        "Discretization"
+    ]
+
+    BC_PLOT_COLORS = [
+        "C0",
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+    ]
+
+    DIFFERENT_REWARD_THRESHOLD = 0.25
+
+    fig, axs = pyplot.subplots(
+        figsize=[6.4 * 1.75, 4.8 * (5 / 1.5)],
+        nrows=len(ENVS),
+        ncols=3,
+    )
+
+    def get_policy_names(env):
+        policy_names = glob(PIVECTOR_TEMPLATE.format(env=env, num_traj="*", num_components="*", policy_name="*", repetition_num="*"))
+        policy_names = ["_".join(os.path.basename(x).split("_")[-4:-2]) for x in policy_names]
+        policy_names = sorted(list(set(policy_names)))
+        return policy_names
+
+    # For each different distance measurement
+    for distance_matrix_template, plot_legend_name, plot_color in zip(BC_DISTANCE_MATRIX_TEMPLATES, BC_LEGEND_NAMES, BC_PLOT_COLORS):
+        for env_i, env in enumerate(ENVS):
+            axs[env_i, 0].grid(alpha=0.2)
+            axs[env_i, 1].grid(alpha=0.2)
+            axs[env_i, 2].grid(alpha=0.2)
+            if "Bipedal" in env and distance_matrix_template == DISCRETIZATION_DISTANCE_MATRIX_TEMPLATE:
+                print("[Note] Skipping env {} for discretization distances (OOM)".format(env))
+                continue
+            axs[env_i, 1].set_title(env.split("-")[0])
+            # These will be NUM_TRAJECTORY length lists
+            average_scores = np.ones((len(NUM_TRAJECTORIES),))
+            std_scores = np.ones((len(NUM_TRAJECTORIES),))
+            for num_traj_idx, num_traj in enumerate(NUM_TRAJECTORIES):
+                # Average over environments, policies and repetitions
+                scores = []
+                min_reward, max_reward = REWARD_SCALES[env]
+                policy_names = get_policy_names(env)
+
+                for policy_name in policy_names:
+                    for repetition in range(1, NUM_REPETITIONS + 1):
+                        # Ugh bit of messing around because I did not think this through...
+                        if distance_matrix_template == PIVECTOR_DISTANCE_MATRIX_TEMPLATE:
+                            file_path = distance_matrix_template.format(env=env, num_traj=num_traj, num_components=NUM_COMPONENTS, policy_name=policy_name, repetition_num=repetition)
+                        else:
+                            file_path = distance_matrix_template.format(env=env, num_traj=num_traj, policy_name=policy_name, repetition_num=repetition)
+
+                        data = np.load(file_path)
+                        distance_matrix = data["distance_matrix"]
+                        rewards = data["average_episodic_rewards"]
+
+                        raveled_reward_distances = np.abs(rewards - rewards[:, None])
+                        # Take upper diagonal, skip diagonal
+                        raveled_reward_distances = raveled_reward_distances[np.triu_indices(raveled_reward_distances.shape[0], 1)]
+                        raveled_distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)]
+
+                        # Score is correlation between the two
+                        correlation = np.corrcoef(raveled_distances, raveled_reward_distances)[0, 1]
+                        scores.append(correlation)
+
+                scores = np.array(scores)
+                average_score = np.mean(scores)
+                std_score = np.std(scores)
+                average_scores[num_traj_idx] = average_score
+                std_scores[num_traj_idx] = std_score
+            ax = axs[env_i, 0]
+            ax.plot(NUM_TRAJECTORIES, average_scores, c=plot_color, label=plot_legend_name)
+            ax.scatter(NUM_TRAJECTORIES, average_scores, c=plot_color)
+            ax.fill_between(
+                NUM_TRAJECTORIES,
+                average_scores - std_scores,
+                average_scores + std_scores,
+                alpha=0.2,
+                color=plot_color,
+                edgecolor="none",
+                linewidth=0.0
+            )
+            ax.set_xticks(NUM_TRAJECTORIES)
+            ax.set_ylabel("Correlation with return-distance")
+
+            # Amount of error to "ground truth" result,
+            # where "ground truth" is one of the results with 100 trajectories of data.
+            # Because of wonkyness of this, store list [#num-traj] of lists,
+            # each storing results for that num-traj run
+            per_trajectory_relative_errors = [[] for i in NUM_TRAJECTORIES]
+            policy_names = get_policy_names(env)
+            for policy_name in policy_names:
+                # The "ground truth" distances, will be filled with first
+                # result with 100 trajectories.
+                anchor_distance = None
+                for traj_i, num_traj in enumerate(NUM_TRAJECTORIES):
+                    for repetition in range(1, NUM_REPETITIONS + 1):
+                        if distance_matrix_template == PIVECTOR_DISTANCE_MATRIX_TEMPLATE:
+                            file_path = distance_matrix_template.format(env=env, num_traj=num_traj, num_components=NUM_COMPONENTS, policy_name=policy_name, repetition_num=repetition)
+                        else:
+                            file_path = distance_matrix_template.format(env=env, num_traj=num_traj, policy_name=policy_name, repetition_num=repetition)
+                        distance_matrix = np.load(file_path)["distance_matrix"]
+                        distance_matrix = (distance_matrix - distance_matrix.min()) / (distance_matrix.max() - distance_matrix.min())
+                        # Get only upper triangle as distance matrix is symmetric. Exlude diagonal
+                        raveled_distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)]
+                        # Check if we use this as the zero-point or compute relative error to
+                        if anchor_distance is None:
+                            assert num_traj == 100
+                            anchor_distance = raveled_distances
+                        else:
+                            per_trajectory_relative_errors[traj_i].append(
+                                np.mean(np.abs(raveled_distances - anchor_distance) / np.abs(anchor_distance))
+                            )
+            # Lists are not of equal length, so can not just change into an array
+            mean_average_errors = np.array([np.mean(np.array(results) * 100) for results in per_trajectory_relative_errors])
+            std_average_errors = np.array([np.std(np.array(results) * 100) for results in per_trajectory_relative_errors])
+            ax = axs[env_i, 1]
+            ax.plot(NUM_TRAJECTORIES, mean_average_errors, c=plot_color, label=plot_legend_name)
+            ax.scatter(NUM_TRAJECTORIES, mean_average_errors, c=plot_color)
+            ax.fill_between(
+                NUM_TRAJECTORIES,
+                mean_average_errors - std_average_errors,
+                mean_average_errors + std_average_errors,
+                alpha=0.2,
+                color=plot_color,
+                edgecolor="none",
+                linewidth=0.0
+            )
+            ax.set_xticks(NUM_TRAJECTORIES)
+            ax.set_ylabel("Relative error to ground truth (%)")
+
+            # Variation between results
+            cv_means = np.ones((len(NUM_TRAJECTORIES,)))
+            cv_stds = np.ones((len(NUM_TRAJECTORIES,)))
+            for traj_i, num_traj in enumerate(NUM_TRAJECTORIES):
+                traj_averaged_cvs = []
+                policy_names = get_policy_names(env)
+                for policy_name in policy_names:
+                    # Compute std over repetitions
+                    distances = []
+                    for repetition in range(1, NUM_REPETITIONS + 1):
+                        if distance_matrix_template == PIVECTOR_DISTANCE_MATRIX_TEMPLATE:
+                            file_path = distance_matrix_template.format(env=env, num_traj=num_traj, num_components=NUM_COMPONENTS, policy_name=policy_name, repetition_num=repetition)
+                        else:
+                            file_path = distance_matrix_template.format(env=env, num_traj=num_traj, policy_name=policy_name, repetition_num=repetition)
+
+                        distance_matrix = np.load(file_path)["distance_matrix"]
+                        distance_matrix = (distance_matrix - distance_matrix.min()) / (distance_matrix.max() - distance_matrix.min())
+                        # Get only upper triangle as distance matrix is symmetric. Exlude diagonal
+                        raveled_distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], 1)]
+                        distances.append(raveled_distances)
+                    distances = np.stack(distances)
+                    # Coefficient of variance (std / mean)
+                    average_cv = np.mean(np.std(distances, axis=0) / np.mean(distances, axis=0))
+                    traj_averaged_cvs.append(average_cv)
+                traj_averaged_cvs = np.array(traj_averaged_cvs)
+                cv_means[traj_i] = np.mean(traj_averaged_cvs)
+                cv_stds[traj_i] = np.std(traj_averaged_cvs)
+
+            ax = axs[env_i, 2]
+            ax.plot(NUM_TRAJECTORIES, cv_means, c=plot_color, label=plot_legend_name)
+            ax.scatter(NUM_TRAJECTORIES, cv_means, c=plot_color)
+            ax.fill_between(
+                NUM_TRAJECTORIES,
+                cv_means - cv_stds,
+                cv_means + cv_stds,
+                alpha=0.2,
+                color=plot_color,
+                edgecolor="none",
+                linewidth=0.0
+            )
+            ax.set_xticks(NUM_TRAJECTORIES)
+            ax.set_ylabel("Coefficient of variance $\\sigma/\\mu$")
+            if env_i == (len(ENVS) - 1):
+                axs[env_i, 1].set_xlabel("Number of trajectories")
+
+    # Add plot type titles to first row
+    axs[0, 0].set_title("Correlation with return-distance")
+    axs[0, 1].set_title(ENVS[0].split("-")[0] + "\nDistance error")
+    axs[0, 2].set_title("Distance variance")
+
+    axs[0, 1].legend(prop={"size": "medium"})
+    pyplot.tight_layout()
+    pyplot.savefig("figures/metric_comparison_appendix.pdf", bbox_inches="tight", pad_inches=0.0)
+
+
+def plot_trust_region_results():
+    """Plot/print results with trust-region experiments"""
+    RESULTS_DIRS = ["trust_region_experiments", "trust_region_experiments_augment_ppo"]
+    ENVS = ["DangerousPath-len25-dim5-v0", "DangerousPath-NoFail-len25-dim5-v0", "CartPole-v0"]
+    DIR_TEMPLATE = "{env}_lr_{learning_rate}"
+    STDOUT_TEMPLATE = "{method}_repetition_{repetition}.txt"
+    REWARD_PATTERN = r"ep_rew_mean[ ]*\| ([0-9\.\-]*)"
+    TIMESTEP_PATTERN = r"total_timesteps[ ]*\| ([0-9]*)"
+
+    NUM_REPETITIONS = 5
+    LEARNING_RATES = ["1e-3", "1e-4", "1e-5", "1e-6"]
+
+    METHODS = {
+        "NoConstraint": ["NoConstraint"],
+        "ClipPPO": ["ClipPPO"],
+        "Gaussian": ["Gaussian_{}".format(kl) for kl in [0.001, 0.005, 0.01, 0.05, 0.1]],
+        "Supervector": ["Supervector_{}".format(kl) for kl in [0.001, 0.005, 0.01, 0.05, 0.1]],
+        "PiMaxTV": ["PiMaxTV_{}".format(kl) for kl in [0.001, 0.005, 0.01, 0.05, 0.1]],
+    }
+
+    fig, axs = pyplot.subplots(
+        figsize=[6.4 * len(LEARNING_RATES), 4.8 * len(ENVS) * len(RESULTS_DIRS)],
+        nrows=len(ENVS) * len(RESULTS_DIRS),
+        ncols=len(LEARNING_RATES),
+        squeeze=False
+    )
+
+    for env_i, (env, results_dir) in enumerate(itertools.product(ENVS, RESULTS_DIRS)):
+        path_to_log_template = os.path.join(results_dir, DIR_TEMPLATE, STDOUT_TEMPLATE)
+        for learning_rate_i, learning_rate in enumerate(LEARNING_RATES):
+            num_plotted_lines = 0
+            ax = axs[env_i, learning_rate_i]
+            ax.set_title("{}\n{} lr: {}".format(results_dir, env, learning_rate))
+            ax.set_xlabel("Timesteps")
+            ax.set_ylabel("Average return")
+            for legend_name, experiment_names in METHODS.items():
+                for experiment_name in experiment_names:
+                    # Construct learning curves
+                    xs = []
+                    ys = []
+                    for repetition in range(NUM_REPETITIONS):
+                        path_to_log = path_to_log_template.format(env=env, learning_rate=learning_rate, method=experiment_name, repetition=repetition)
+                        log = None
+                        try:
+                            log = open(path_to_log).read()
+                        except Exception as e:
+                            print("[Warning] Could not load {}: {}".format(path_to_log, e))
+                        timesteps = list(map(float, re.findall(TIMESTEP_PATTERN, log)))
+                        rewards = list(map(float, re.findall(REWARD_PATTERN, log)))
+                        assert len(timesteps) == len(rewards)
+                        xs.append(np.array(timesteps))
+                        ys.append(np.array(rewards))
+
+                    average_x, average_y, std_y = interpolate_and_average(xs, ys)
+                    color, linestyle = color_linestyle_cycle(num_plotted_lines)
+                    ax.plot(average_x, average_y, label=experiment_name, c=color, linestyle=linestyle)
+                    ax.fill_between(
+                        average_x,
+                        average_y - std_y / 2,
+                        average_y + std_y / 2,
+                        alpha=0.2,
+                        color=color,
+                        linewidth=0.0
+                    )
+                    num_plotted_lines += 1
+    axs[0, 0].legend()
+    pyplot.tight_layout()
+    pyplot.savefig("figures/trust_region_results_appendix.pdf", bbox_inches="tight", pad_inches=0.0)
+
 if __name__ == "__main__":
     plot_ppo_clip_results()
     plot_tsnes()
     plot_bc_results()
     plot_ubm_results()
+    plot_metric_results()
+    plot_trust_region_results()

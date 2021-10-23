@@ -45,7 +45,7 @@ do
           output_dir=ubm_experiments/ubms_${num_components}_components_${num_traj}_trajectories/${current_experiment}_repetition_${repetition}/
           mkdir -p ${output_dir}
           python3 create_pivectors.py train_ubms ${output_dir} --max-trajectories ${num_traj} --n-components ${num_components} --skip-existing --inputs ${current_experiment} &
-          sleep 3
+          sleep 1
         done
         wait $!
       done

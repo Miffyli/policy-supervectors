@@ -1,4 +1,4 @@
-stable-baselines3==0.8.0
+stable-baselines3==0.10.0
 stable-baselines==2.10.0
 scikit-learn==0.23.1
 scipy==1.5.2
@@ -6,8 +6,9 @@ matplotlib==3.3.1
 gym[box2d]==0.17.2
 tqdm==4.48.2
 PyYAML==5.3.1
-tensorflow==1.14.0
+tensorflow==1.15
 cma==3.0.3
 mpi4py==3.0.3
 gast==0.2.2
 git+https://github.com/HumanCompatibleAI/imitation.git@c668cdaafceabac5249d65a7a4b7e516e4a6f220#egg=imitation
+numba

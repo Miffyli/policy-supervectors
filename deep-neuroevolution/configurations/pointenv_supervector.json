@@ -1,0 +1,43 @@
+{
+  "config": {
+    "calc_obstat_prob": 0.00,
+    "episodes_per_batch": 100,
+    "eval_prob": 0.01,
+    "l2coeff": 0.005,
+    "noise_stdev": 0.02,
+    "snapshot_freq": 10000,
+    "timesteps_per_batch": 10000,
+    "return_proc_mode": "centered_sign_rank",
+    "episode_cutoff_mode": "env_default"
+  },
+  "env_id": "DeceptivePointEnv-v0",
+  "exp_prefix": "pointenv",
+  "max_number_of_iterations": 128,
+  "algo_type": "nsr",
+  "novelty_search": {
+    "k": 10,
+    "population_size": 3,
+    "num_rollouts": 5,
+    "selection_method": "novelty_prob",
+    "bc_type": "supervector"
+  },
+  "optimizer": {
+    "args": {
+      "stepsize": 0.01
+    },
+    "type": "adam"
+  },
+  "policy": {
+    "args": {
+      "ac_bins": "continuous:",
+      "ac_noise_std": 0.01,
+      "connection_type": "ff",
+      "hidden_dims": [
+        16,
+        16
+      ],
+      "nonlin_type": "tanh"
+    },
+    "type": "MlpPolicy"
+  }
+}

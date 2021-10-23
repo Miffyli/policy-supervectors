@@ -22,7 +22,7 @@ from sklearn.mixture import GaussianMixture
 # For distances between MAP-adapted GMMs:
 # [3] http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.437.6872&rep=rep1&type=pdf
 
-def train_ubm(data, n_components=64, n_init=1):
+def train_ubm(data, n_components=64, n_init=1, verbose=2):
     """
     Train a GMM on the data to form an Universal Background Model,
     that will be later used to adapt per-policy means.
@@ -35,20 +35,22 @@ def train_ubm(data, n_components=64, n_init=1):
             from various policies to be used to create a model
             of a "general policy".
         n_components (int): Number of components in the UBM
+        n_init (int): Fed to GaussianMixture
+        verbose (int): Fed to GaussianMixture
     Returns:
         ubm (sklearn.mixture.GaussianMixture): Trained GMM model
     """
     ubm = GaussianMixture(
         n_components=n_components,
         covariance_type="diag",
-        verbose=2,
+        verbose=verbose,
         n_init=n_init
     )
     ubm.fit(data)
     return ubm
 
 
-def save_ubm(path, ubm, means, stds, trajectory_indeces=np.nan):
+def save_ubm(path, ubm, means, stds, trajectory_indeces=np.nan, **additional_items):
     """
     Save sklearn UBM GMM into a numpy arrays for
     easier transfer between sklearn versions etc.
@@ -61,6 +63,8 @@ def save_ubm(path, ubm, means, stds, trajectory_indeces=np.nan):
         trajectory_indeces (ndarray): (num_policies, num_trajs)
             array, that tells which trajectories were used to train
             this UBM. Used when trajectories are sampled.
+        **additional_items: Additional items that will be added to the numpy
+            archive.
     """
     np.savez(
         path,
@@ -72,7 +76,8 @@ def save_ubm(path, ubm, means, stds, trajectory_indeces=np.nan):
         ubm_precisions_cholesky=ubm.precisions_cholesky_,
         means=means,
         stds=stds,
-        trajectory_indeces=trajectory_indeces
+        trajectory_indeces=trajectory_indeces,
+        **additional_items
     )
 
 
